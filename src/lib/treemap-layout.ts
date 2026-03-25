@@ -111,6 +111,57 @@ function adaptivePadding(count: number, area: number): { padding: number; paddin
 }
 
 /**
+ * Emit child-group tiles inside a gutter group rect.
+ * Shows subgroup labels instead of individual tab favicons for a cleaner sidebar.
+ * Only emits when the group has 2+ children and the rect is large enough.
+ */
+function emitGutterChildren(
+  nodes: NodeRect[],
+  group: TabGroup,
+  groupRect: Rect,
+  colorIndex: number,
+): void {
+  if (!group.children || group.children.length < 2) return;
+  if (groupRect.w < 60 || groupRect.h < 60) return;
+
+  const labelH = 20;
+  const inset = 3;
+  const childAreaW = groupRect.w - inset * 2;
+  const childAreaH = groupRect.h - labelH - inset * 2;
+
+  if (childAreaW < 30 || childAreaH < 30) return;
+
+  const childLeaves = runTreemap(
+    group.children.map((c) => ({
+      weight: Math.max(c.tabs.length, 1),
+      data: c,
+    })),
+    childAreaW,
+    childAreaH,
+    2,
+    0,
+    group.children.length >= 4,
+  );
+
+  for (const { data: child, rect: childRect } of childLeaves) {
+    nodes.push({
+      id: `gutter-child-${child.id}`,
+      kind: "child-group",
+      rect: {
+        x: childRect.x + groupRect.x + inset,
+        y: childRect.y + groupRect.y + labelH,
+        w: childRect.w,
+        h: childRect.h,
+      },
+      colorIndex,
+      opacity: 0.5,
+      group: child,
+      parentGroupId: group.id,
+    });
+  }
+}
+
+/**
  * Unified layout: outputs all NodeRects for any zoom state.
  *
  * focusedGroupId === null → overview (group tiles only)
@@ -296,15 +347,17 @@ export function computeUnifiedLayout(
           true,
         );
         gutterLeaves.forEach(({ data: seg, rect: gutterRect }) => {
+          const absRect: Rect = {
+            x: gutterRect.x + gutterX,
+            y: gutterRect.y + innerY,
+            w: gutterRect.w,
+            h: gutterRect.h,
+          };
+
           nodes.push({
             id: seg.child.id,
             kind: "child-group",
-            rect: {
-              x: gutterRect.x + gutterX,
-              y: gutterRect.y + innerY,
-              w: gutterRect.w,
-              h: gutterRect.h,
-            },
+            rect: absRect,
             colorIndex: colorMap.get(focusedGroupId) ?? 0,
             opacity: 0.35,
             group: seg.child,
@@ -424,20 +477,25 @@ export function computeUnifiedLayout(
     );
 
     gutterLeaves.forEach(({ data, rect }) => {
+      const absRect: Rect = {
+        x: rect.x + gutterX,
+        y: rect.y + BREADCRUMB_H,
+        w: rect.w,
+        h: rect.h,
+      };
+
       nodes.push({
         id: data.group.id,
         kind: "group",
-        rect: {
-          x: rect.x + gutterX,
-          y: rect.y + BREADCRUMB_H,
-          w: rect.w,
-          h: rect.h,
-        },
+        rect: absRect,
         colorIndex: colorMap.get(data.group.id) ?? 0,
         opacity: 0.35,
         group: data.group,
         parentGroupId: null,
       });
+
+      // Subgroup tiles inside gutter groups
+      emitGutterChildren(nodes, data.group, absRect, colorMap.get(data.group.id) ?? 0);
     });
   }
 
