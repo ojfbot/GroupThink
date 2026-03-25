@@ -26,6 +26,8 @@ function App() {
     Map<number, GroupAssignment> | undefined
   >();
   const [treemapReady, setTreemapReady] = useState(false);
+  const [focusLabel, setFocusLabel] = useState<string | undefined>();
+  const [focusChildLabel, setFocusChildLabel] = useState<string | undefined>();
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   const isLoading = loadingPhase !== "idle";
@@ -116,11 +118,20 @@ function App() {
           setGroupAssignments(assignments);
         }
 
-        // Update treemap
-        setRawGrouping(result);
-        setTabCount(countTabs(result));
-        setHistory([]);
-        if (!silent) setLoadingPhase("idle");
+        if (silent) {
+          // Silent regroup: storage listener picks up the update automatically.
+          // Only set state here as fallback (storage listener may have already fired).
+          setRawGrouping(result);
+          setTabCount(countTabs(result));
+        } else {
+          // Full regroup: update all state
+          setRawGrouping(result);
+          setTabCount(countTabs(result));
+          setHistory([]);
+          setFocusLabel(undefined);
+          setFocusChildLabel(undefined);
+          setLoadingPhase("idle");
+        }
       } catch (err) {
         if (!silent) {
           setError(err instanceof Error ? err.message : "Failed to group tabs");
@@ -131,7 +142,7 @@ function App() {
     [clearTimers, countTabs],
   );
 
-  // Initial grouping — try cache first for instant load
+  // Initial grouping — show cache instantly, then refresh in background
   useEffect(() => {
     if (!config?.anthropicApiKey) return;
 
@@ -141,12 +152,14 @@ function App() {
           type: "get-cached-grouping",
         })) as GroupingResponse | null;
         if (cached && cached.groups.length > 0) {
-          // Show cached grouping instantly — no animation
-          // Background tab listeners keep the cache fresh; user can hit Refresh for immediate update
+          // Show cached grouping instantly as placeholder
           setRawGrouping(cached);
           setTabCount(countTabs(cached));
           setSpecificity(cached.specificity ?? specificity);
           setLoadingPhase("idle");
+          // Kick off a silent background regroup so tabs stay fresh
+          // (storage listener will pick up the result)
+          doGrouping(cached.specificity ?? specificity, { silent: true });
           return;
         }
       } catch {
@@ -155,6 +168,25 @@ function App() {
       doGrouping(specificity);
     })();
   }, [config?.anthropicApiKey, countTabs, doGrouping, specificity]);
+
+  // Listen for background regroups (tab created/removed/updated)
+  useEffect(() => {
+    const listener = (
+      changes: { [key: string]: chrome.storage.StorageChange },
+      area: string,
+    ) => {
+      if (area !== "local") return;
+      if (!changes.groupthink_grouping?.newValue) return;
+      // Only pick up background updates when not actively loading
+      if (loadingPhase !== "idle" || chatLoading) return;
+
+      const updated = changes.groupthink_grouping.newValue as GroupingResponse;
+      setRawGrouping(updated);
+      setTabCount(countTabs(updated));
+    };
+    chrome.storage.onChanged.addListener(listener);
+    return () => chrome.storage.onChanged.removeListener(listener);
+  }, [loadingPhase, chatLoading, countTabs]);
 
   const handleSpecificityChange = useCallback(
     (newSpec: number) => {
@@ -195,9 +227,21 @@ function App() {
         if (result.error) throw new Error(result.error);
         setRawGrouping(result);
 
+        // Apply focus hints from LLM
+        if (result.focusGroupLabel) {
+          setFocusLabel(result.focusGroupLabel);
+          setFocusChildLabel(result.focusChildLabel ?? undefined);
+        } else {
+          setFocusLabel(undefined);
+          setFocusChildLabel(undefined);
+        }
+
+        const focusNote = result.focusGroupLabel
+          ? ` → Focused: ${result.focusGroupLabel}${result.focusChildLabel ? ` / ${result.focusChildLabel}` : ""}`
+          : "";
         const assistantMsg: ConversationMessage = {
           role: "assistant",
-          content: JSON.stringify(result.groups.map((g) => g.label)),
+          content: JSON.stringify(result.groups.map((g) => g.label)) + focusNote,
           timestamp: Date.now(),
         };
         setHistory([...updatedHistory, assistantMsg]);
@@ -211,7 +255,7 @@ function App() {
   );
 
   const handleFocusTab = useCallback((tabId: number) => {
-    chrome.runtime.sendMessage({ type: "focus-tab", tabId });
+    chrome.runtime.sendMessage({ type: "split-view-tab", tabId });
   }, []);
 
   const handleCloseTab = useCallback(
@@ -337,6 +381,12 @@ function App() {
             onFocusTab={handleFocusTab}
             onCloseTab={handleCloseTab}
             onReady={() => setTreemapReady(true)}
+            requestedFocusLabel={focusLabel}
+            requestedChildLabel={focusChildLabel}
+            onFocusDismissed={() => {
+              setFocusLabel(undefined);
+              setFocusChildLabel(undefined);
+            }}
           />
         )}
 
