@@ -1,8 +1,10 @@
 import { GroupThinkAI } from "../lib/ai";
+import { gatherBrowserContext } from "../lib/browser-context";
 import { ENV_CONFIG } from "../lib/env";
-import { mergeSmallGroups, mergeStepResults } from "../lib/grouping";
+import { enforceSubgroups, mergeSmallGroups, mergeStepResults } from "../lib/grouping";
+import { buildContextHints } from "../lib/prompts";
 import { Storage } from "../lib/storage";
-import { closeTab, focusTab, getAllTabs } from "../lib/tabs";
+import { closeTab, focusTab, getAllTabs, splitViewTab } from "../lib/tabs";
 import type {
   ConversationMessage,
   GroupingResponse,
@@ -49,13 +51,19 @@ async function captureTabThumbnail(tabId: number): Promise<string | null> {
 function hydrate(llmResult: LLMGroupingResult, tabs: TabInfo[]): GroupingResponse {
   const tabMap = new Map(tabs.map((t) => [t.id, t]));
   const descriptions = llmResult.tabDescriptions ?? {};
+  const tags = llmResult.tabTags ?? {};
   let idCounter = 0;
 
   function hydrateTab(tid: number): TabInfo | undefined {
     const tab = tabMap.get(tid);
     if (!tab) return undefined;
     const desc = descriptions[String(tid)];
-    return desc ? { ...tab, description: desc } : tab;
+    const tabTagList = tags[String(tid)];
+    return {
+      ...tab,
+      ...(desc ? { description: desc } : {}),
+      ...(tabTagList ? { tags: tabTagList } : {}),
+    };
   }
 
   function hydrateGroup(item: LLMGroupItem): TabGroup {
@@ -249,9 +257,17 @@ async function handleMessage(message: { type: string; [key: string]: unknown }):
       const ai = new GroupThinkAI(config.anthropicApiKey, config.model);
       const specificity = (message.specificity as number) ?? config.specificity;
 
+      // ── Gather browser context (if enabled) ──
+      let contextHints: string | undefined;
+      if (config.contextEnrichment && config.contextEnrichment !== "off") {
+        console.log(`[GroupThink] gathering browser context (${config.contextEnrichment})...`);
+        const context = await gatherBrowserContext(tabs, config.contextEnrichment);
+        contextHints = buildContextHints(context, tabs);
+      }
+
       // ── Step 1: Initial grouping ──
       console.log("[GroupThink] step 1: initial grouping...");
-      let llmResult = await ai.groupTabs(tabs, specificity);
+      let llmResult = await ai.groupTabs(tabs, specificity, contextHints);
       console.log(
         `[GroupThink] step 1 complete: ${llmResult.groups.length} groups, ${llmResult.ungrouped.length} ungrouped`,
       );
@@ -286,6 +302,16 @@ async function handleMessage(message: { type: string; [key: string]: unknown }):
       const tabSummaries = tabs.map((t) => ({ id: t.id, url: t.url }));
       llmResult = mergeSmallGroups(llmResult, tabSummaries);
       console.log(`[GroupThink] step 3 complete: ${llmResult.groups.length} groups`);
+
+      // ── Step 4: Enforce subgroups for high specificity ──
+      if (specificity >= 5) {
+        console.log("[GroupThink] step 4: enforcing subgroups...");
+        const tabDetails = tabs.map((t) => ({ id: t.id, url: t.url, title: t.title }));
+        llmResult = enforceSubgroups(llmResult, specificity, tabDetails);
+        console.log(`[GroupThink] step 4 complete: ${llmResult.groups.length} groups`);
+      } else {
+        console.log("[GroupThink] step 4: skipped (specificity < 5)");
+      }
 
       // ── Hydrate + store ──
       console.log(`[GroupThink] hydrating ${llmResult.groups.length} groups...`);
@@ -343,12 +369,25 @@ async function handleMessage(message: { type: string; [key: string]: unknown }):
       const grouping = hydrate(llmResult, allTabs);
       grouping.specificity = currentGrouping.specificity;
 
+      // Pass through focus hints from LLM
+      if (llmResult.focusGroupLabel) {
+        grouping.focusGroupLabel = llmResult.focusGroupLabel;
+      }
+      if (llmResult.focusChildLabel) {
+        grouping.focusChildLabel = llmResult.focusChildLabel;
+      }
+
       await Storage.setGrouping(grouping);
       return grouping;
     }
 
     case "focus-tab": {
       await focusTab(message.tabId as number);
+      return { ok: true };
+    }
+
+    case "split-view-tab": {
+      await splitViewTab(message.tabId as number);
       return { ok: true };
     }
 
