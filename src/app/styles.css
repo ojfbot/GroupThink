@@ -931,6 +931,29 @@ body {
   filter: brightness(1.3);
 }
 
+/* Micro tab tiles inside gutter groups — microchip look */
+.gt-node--micro {
+  cursor: default;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-width: 1px;
+  border-radius: 2px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.gt-node--micro .gt-node__tab-close {
+  display: none !important;
+}
+
+.gt-node__tab-favicon--micro {
+  width: 12px;
+  height: 12px;
+  opacity: 0.7;
+}
+
 /* Focused group = background/header behind tab tiles */
 .gt-node--focused {
   cursor: pointer;
@@ -1089,6 +1112,26 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
+}
+
+.gt-node__tab-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  max-width: 100%;
+  overflow: hidden;
+  margin-top: 1px;
+}
+
+.gt-tag {
+  display: inline-flex;
+  padding: 1px 5px;
+  font-size: 8px;
+  font-weight: 500;
+  border-radius: 3px;
+  color: rgba(255, 255, 255, 0.85);
+  white-space: nowrap;
+  line-height: 1.4;
 }
 
 .gt-node__tab-close {

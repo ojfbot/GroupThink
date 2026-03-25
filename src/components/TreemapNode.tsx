@@ -237,9 +237,14 @@ function ChildGroupContent({
       onClick={() => onClickGroup(group.id)}
       data-node-id={node.id}
     >
-      <span className="gt-node__child-label">
+      <span
+        className="gt-node__child-label"
+        style={w < 80 || h < 30 ? { fontSize: "8px" } : undefined}
+      >
         {group.label}
-        {group.sublabel && <span className="gt-node__child-sublabel"> / {group.sublabel}</span>}
+        {w > 60 && group.sublabel && (
+          <span className="gt-node__child-sublabel"> / {group.sublabel}</span>
+        )}
       </span>
     </div>
   );
@@ -271,6 +276,7 @@ function TabContent({
   onCloseTab: (id: number) => void;
 }) {
   const tab = node.tab!;
+  const isMicro = node.opacity < 1;
   const domain = useMemo(() => getDomain(tab.url), [tab.url]);
   const nodeRef = useRef<HTMLDivElement>(null);
 
@@ -280,6 +286,7 @@ function TabContent({
   const hoverTimer = useRef<ReturnType<typeof setTimeout>>();
 
   const onEnter = useCallback(() => {
+    if (isMicro) return;
     hoverTimer.current = setTimeout(() => {
       if (nodeRef.current) {
         const r = nodeRef.current.getBoundingClientRect();
@@ -297,12 +304,45 @@ function TabContent({
           .catch(() => {});
       }
     }, 200);
-  }, [tab.thumbnail, tab.id, capturedThumb]);
+  }, [tab.thumbnail, tab.id, capturedThumb, isMicro]);
 
   const onLeave = useCallback(() => {
     clearTimeout(hoverTimer.current);
     setHovered(false);
   }, []);
+
+  // Micro gutter tabs — minimal tile with favicon only
+  if (isMicro) {
+    return (
+      <div
+        className={`${classList} gt-node--micro`}
+        style={{
+          left: x,
+          top: y,
+          width: w,
+          height: h,
+          background: gradient,
+          borderColor,
+          opacity: node.opacity,
+        }}
+        onClick={() => onFocusTab(tab.id)}
+        data-node-id={node.id}
+      >
+        {w > 10 && h > 10 && (
+          <img
+            className="gt-node__tab-favicon gt-node__tab-favicon--micro"
+            src={tab.favIconUrl || `https://www.google.com/s2/favicons?domain=${domain}&sz=16`}
+            alt=""
+            width={12}
+            height={12}
+            onError={(e) => {
+              (e.target as HTMLImageElement).style.display = "none";
+            }}
+          />
+        )}
+      </div>
+    );
+  }
 
   return (
     <div
@@ -337,6 +377,16 @@ function TabContent({
       {h > 44 && tab.description && <span className="gt-node__tab-desc">{tab.description}</span>}
 
       {h > 56 && <span className="gt-node__tab-domain">{domain}</span>}
+
+      {h > 64 && w > 120 && tab.tags && tab.tags.length > 0 && (
+        <div className="gt-node__tab-tags">
+          {tab.tags.slice(0, 3).map((tag) => (
+            <span key={tag} className="gt-tag" style={{ backgroundColor: `hsl(${node.colorIndex * 47 + 200}, 25%, ${40}%)` }}>
+              {tag}
+            </span>
+          ))}
+        </div>
+      )}
 
       <button
         className="gt-node__tab-close"

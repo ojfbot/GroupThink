@@ -22,6 +22,9 @@ const LLMResponseSchema = z.object({
   groups: z.array(LLMGroupSchema),
   ungrouped: z.array(z.number()),
   tabDescriptions: z.record(z.string(), z.string()).optional(),
+  tabTags: z.record(z.string(), z.array(z.string())).optional(),
+  focusGroupLabel: z.string().optional(),
+  focusChildLabel: z.string().optional(),
 });
 
 // ── Normalize LLM field name variants before Zod validation ──
@@ -122,7 +125,11 @@ export class GroupThinkAI {
     this.model = model;
   }
 
-  async groupTabs(tabs: TabInfo[], specificity: number): Promise<LLMGroupingResult> {
+  async groupTabs(
+    tabs: TabInfo[],
+    specificity: number,
+    contextHints?: string,
+  ): Promise<LLMGroupingResult> {
     console.log(`[GroupThink] groupTabs: ${tabs.length} tabs, specificity=${specificity}`);
 
     const tabSummaries = tabs.map((t) => ({
@@ -136,7 +143,9 @@ export class GroupThinkAI {
       model: this.model,
       max_tokens: 4096,
       system: SYSTEM_PROMPT,
-      messages: [{ role: "user", content: buildGroupingPrompt(tabSummaries, specificity) }],
+      messages: [
+        { role: "user", content: buildGroupingPrompt(tabSummaries, specificity, contextHints) },
+      ],
     });
     const elapsed = Math.round(performance.now() - t0);
 
