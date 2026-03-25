@@ -113,33 +113,6 @@ chrome.commands.onCommand.addListener((command) => {
   }
 });
 
-// ── Preemptive background regrouping on tab changes ──
-
-let regroupTimer: ReturnType<typeof setTimeout> | undefined;
-
-function scheduleRegroup() {
-  clearTimeout(regroupTimer);
-  regroupTimer = setTimeout(async () => {
-    try {
-      const config = await Storage.getConfig();
-      if (!config.anthropicApiKey) return;
-      // Use specificity from last grouping (preserves user's slider position)
-      const lastGrouping = await Storage.getGrouping();
-      const specificity = lastGrouping?.specificity ?? config.specificity;
-      console.log("[GroupThink] preemptive regroup triggered by tab change");
-      await handleMessage({ type: "group-tabs", specificity });
-    } catch (err) {
-      console.warn("[GroupThink] preemptive regroup failed:", err);
-    }
-  }, 10_000); // 10s debounce
-}
-
-chrome.tabs.onCreated.addListener(scheduleRegroup);
-chrome.tabs.onRemoved.addListener(scheduleRegroup);
-chrome.tabs.onUpdated.addListener((_tabId, changeInfo) => {
-  if (changeInfo.url) scheduleRegroup();
-});
-
 // ── Auto-configure on install ──
 
 chrome.runtime.onInstalled.addListener(async (details) => {
@@ -147,7 +120,7 @@ chrome.runtime.onInstalled.addListener(async (details) => {
     if (ENV_CONFIG?.ANTHROPIC_API_KEY) {
       await Storage.setConfig({
         anthropicApiKey: ENV_CONFIG.ANTHROPIC_API_KEY,
-        model: ENV_CONFIG.ANTHROPIC_MODEL || "claude-sonnet-4-20250514",
+        model: ENV_CONFIG.ANTHROPIC_MODEL || "claude-haiku-4-5-20251001",
       });
       console.log("[GroupThink] Auto-configured from env.json");
     } else {

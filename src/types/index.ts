@@ -71,7 +71,7 @@ export interface GroupThinkConfig {
 }
 
 export const DEFAULT_CONFIG: GroupThinkConfig = {
-  model: "claude-sonnet-4-20250514",
+  model: "claude-haiku-4-5-20251001",
   specificity: 5,
   theme: "auto",
   contextEnrichment: "off",

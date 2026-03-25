@@ -152,14 +152,11 @@ function App() {
           type: "get-cached-grouping",
         })) as GroupingResponse | null;
         if (cached && cached.groups.length > 0) {
-          // Show cached grouping instantly as placeholder
+          // Show cached grouping instantly — user clicks Refresh for fresh results
           setRawGrouping(cached);
           setTabCount(countTabs(cached));
           setSpecificity(cached.specificity ?? specificity);
           setLoadingPhase("idle");
-          // Kick off a silent background regroup so tabs stay fresh
-          // (storage listener will pick up the result)
-          doGrouping(cached.specificity ?? specificity, { silent: true });
           return;
         }
       } catch {
@@ -168,22 +165,6 @@ function App() {
       doGrouping(specificity);
     })();
   }, [config?.anthropicApiKey, countTabs, doGrouping, specificity]);
-
-  // Listen for background regroups (tab created/removed/updated)
-  useEffect(() => {
-    const listener = (changes: { [key: string]: chrome.storage.StorageChange }, area: string) => {
-      if (area !== "local") return;
-      if (!changes.groupthink_grouping?.newValue) return;
-      // Only pick up background updates when not actively loading
-      if (loadingPhase !== "idle" || chatLoading) return;
-
-      const updated = changes.groupthink_grouping.newValue as GroupingResponse;
-      setRawGrouping(updated);
-      setTabCount(countTabs(updated));
-    };
-    chrome.storage.onChanged.addListener(listener);
-    return () => chrome.storage.onChanged.removeListener(listener);
-  }, [loadingPhase, chatLoading, countTabs]);
 
   const handleSpecificityChange = useCallback(
     (newSpec: number) => {
