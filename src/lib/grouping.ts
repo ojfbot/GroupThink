@@ -1,4 +1,4 @@
-import type { GroupingResponse, LLMGroupingResult, TabGroup } from "../types";
+import type { GroupingResponse, LLMGroupItem, LLMGroupingResult, TabGroup } from "../types";
 
 /**
  * Flatten a hierarchical grouping based on specificity level.
@@ -62,20 +62,123 @@ export function shouldRePrompt(
   newSpecificity: number,
   groups: TabGroup[],
 ): boolean {
-  // Moving from broad (<=3) to specific (>=7) or vice versa
-  const crossesMajorThreshold =
-    (currentSpecificity <= 3 && newSpecificity >= 7) ||
-    (currentSpecificity >= 7 && newSpecificity <= 3);
+  // Any jump of 3+ specificity points
+  if (Math.abs(newSpecificity - currentSpecificity) >= 3) return true;
 
-  if (crossesMajorThreshold) return true;
+  // Crossing from broad to specific
+  if (currentSpecificity <= 3 && newSpecificity >= 5) return true;
+  if (currentSpecificity >= 7 && newSpecificity <= 3) return true;
 
-  // Moving to high specificity but no groups have children
-  if (newSpecificity >= 7) {
-    const hasChildren = groups.some((g) => g.children && g.children.length > 0);
-    if (!hasChildren) return true;
+  // Moving to mid-high specificity but large groups lack children
+  if (newSpecificity >= 5) {
+    const threshold = newSpecificity >= 7 ? 4 : 6;
+    const hasLargeFlat = groups.some(
+      (g) => countTabs(g) >= threshold && (!g.children || g.children.length === 0),
+    );
+    if (hasLargeFlat) return true;
   }
 
   return false;
+}
+
+/**
+ * Post-LLM enforcement: ensure large groups have children at high specificity.
+ * Client-side domain clustering — no LLM call.
+ */
+export function enforceSubgroups(
+  result: LLMGroupingResult,
+  specificity: number,
+  tabs: { id: number; url: string; title: string }[],
+): LLMGroupingResult {
+  if (specificity < 5) return result;
+
+  const threshold = specificity >= 7 ? 4 : 6;
+  const tabMap = new Map(tabs.map((t) => [t.id, t]));
+  const merged = structuredClone(result);
+
+  function getDomain(tabId: number): string {
+    const t = tabMap.get(tabId);
+    if (!t) return "";
+    try {
+      return new URL(t.url).hostname.replace("www.", "");
+    } catch {
+      return "";
+    }
+  }
+
+  function labelFromDomain(domain: string): string {
+    // "docs.anthropic.com" → "Anthropic Docs", "github.com" → "GitHub"
+    const parts = domain.split(".");
+    if (parts.length >= 3) {
+      const sub = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
+      const base = parts[parts.length - 2].charAt(0).toUpperCase() + parts[parts.length - 2].slice(1);
+      return `${base} ${sub}`;
+    }
+    return parts[parts.length - 2]
+      ? parts[parts.length - 2].charAt(0).toUpperCase() + parts[parts.length - 2].slice(1)
+      : domain;
+  }
+
+  for (const group of merged.groups) {
+    if (group.tabIds.length < threshold) continue;
+    if (group.children && group.children.length > 0) continue;
+
+    // Cluster by domain
+    const domainClusters = new Map<string, number[]>();
+    for (const tabId of group.tabIds) {
+      const domain = getDomain(tabId);
+      const key = domain || "__unknown";
+      if (!domainClusters.has(key)) domainClusters.set(key, []);
+      domainClusters.get(key)!.push(tabId);
+    }
+
+    if (domainClusters.size >= 2) {
+      // Multiple domains → create children from clusters
+      const children: LLMGroupItem[] = [];
+      for (const [domain, tabIds] of domainClusters) {
+        if (tabIds.length === 0) continue;
+        children.push({
+          label: domain === "__unknown" ? "Other" : labelFromDomain(domain),
+          tabIds,
+        });
+      }
+      // Merge tiny children (1 tab) into the largest child
+      const sorted = children.sort((a, b) => b.tabIds.length - a.tabIds.length);
+      const kept: LLMGroupItem[] = [];
+      for (const child of sorted) {
+        if (child.tabIds.length <= 1 && kept.length > 0) {
+          kept[0].tabIds.push(...child.tabIds);
+        } else {
+          kept.push(child);
+        }
+      }
+      if (kept.length >= 2) {
+        group.children = kept;
+        group.tabIds = [];
+        console.log(
+          `[GroupThink] enforceSubgroups: decomposed "${group.label}" into ${kept.length} children`,
+        );
+      }
+    } else if (group.tabIds.length >= 6) {
+      // Single domain, 6+ tabs → split into halves by title
+      const sortedIds = [...group.tabIds].sort((a, b) => {
+        const ta = tabMap.get(a)?.title ?? "";
+        const tb = tabMap.get(b)?.title ?? "";
+        return ta.localeCompare(tb);
+      });
+      const mid = Math.ceil(sortedIds.length / 2);
+      group.children = [
+        { label: `${group.label} A`, tabIds: sortedIds.slice(0, mid) },
+        { label: `${group.label} B`, tabIds: sortedIds.slice(mid) },
+      ];
+      group.tabIds = [];
+      console.log(
+        `[GroupThink] enforceSubgroups: split "${group.label}" into 2 halves (single domain)`,
+      );
+    }
+  }
+
+  return merged;
 }
 
 /** Move a tab from one group to another */

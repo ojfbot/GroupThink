@@ -11,6 +11,7 @@ export interface TabInfo {
   groupId: number;
   description?: string;
   thumbnail?: string;
+  tags?: string[];
 }
 
 // ── Grouping ──
@@ -29,6 +30,8 @@ export interface GroupingResponse {
   ungrouped: TabInfo[];
   specificity: number; // 1-10
   timestamp: number;
+  focusGroupLabel?: string;
+  focusChildLabel?: string;
 }
 
 // ── LLM response schema (before hydrating with TabInfo) ──
@@ -44,6 +47,9 @@ export interface LLMGroupingResult {
   groups: LLMGroupItem[];
   ungrouped: number[];
   tabDescriptions?: Record<string, string>;
+  tabTags?: Record<string, string[]>;
+  focusGroupLabel?: string;
+  focusChildLabel?: string;
 }
 
 // ── Chat ──
@@ -61,12 +67,14 @@ export interface GroupThinkConfig {
   model: string;
   specificity: number;
   theme: "light" | "dark" | "auto";
+  contextEnrichment: "off" | "basic" | "full";
 }
 
 export const DEFAULT_CONFIG: GroupThinkConfig = {
   model: "claude-sonnet-4-20250514",
   specificity: 5,
   theme: "auto",
+  contextEnrichment: "off",
 };
 
 // ── Messages (app ↔ background) ──
@@ -78,6 +86,7 @@ export type MessageType =
   | "group-tabs"
   | "refine-grouping"
   | "focus-tab"
+  | "split-view-tab"
   | "close-tab"
   | "ping";
 
