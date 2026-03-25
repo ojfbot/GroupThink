@@ -9,9 +9,20 @@ interface TreemapViewProps {
   onFocusTab: (tabId: number) => void;
   onCloseTab: (tabId: number) => void;
   onReady?: () => void;
+  requestedFocusLabel?: string;
+  requestedChildLabel?: string;
+  onFocusDismissed?: () => void;
 }
 
-export function TreemapView({ grouping, onFocusTab, onCloseTab, onReady }: TreemapViewProps) {
+export function TreemapView({
+  grouping,
+  onFocusTab,
+  onCloseTab,
+  onReady,
+  requestedFocusLabel,
+  requestedChildLabel,
+  onFocusDismissed,
+}: TreemapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [focusedGroupId, setFocusedGroupId] = useState<string | null>(null);
@@ -47,13 +58,38 @@ export function TreemapView({ grouping, onFocusTab, onCloseTab, onReady }: Treem
     return () => ro.disconnect();
   }, []);
 
+  // Auto-focus when chat requests it
+  useEffect(() => {
+    if (!requestedFocusLabel) return;
+    const normalizedReq = requestedFocusLabel.toLowerCase();
+    const match = grouping.groups.find((g) => g.label.toLowerCase() === normalizedReq);
+    if (match) {
+      setFocusedGroupId(match.id);
+      // If a child label is also requested, find and focus it
+      if (requestedChildLabel && match.children) {
+        const normalizedChild = requestedChildLabel.toLowerCase();
+        const childMatch = match.children.find(
+          (c) => c.label.toLowerCase() === normalizedChild,
+        );
+        if (childMatch) {
+          setFocusedChildId(childMatch.id);
+        } else {
+          setFocusedChildId(null);
+        }
+      } else {
+        setFocusedChildId(null);
+      }
+    }
+  }, [requestedFocusLabel, requestedChildLabel, grouping.groups]);
+
   const zoomOut = useCallback(() => {
     if (focusedChildId) {
       setFocusedChildId(null);
       return;
     }
     setFocusedGroupId(null);
-  }, [focusedChildId]);
+    onFocusDismissed?.();
+  }, [focusedChildId, onFocusDismissed]);
 
   // Escape → zoom out (child first, then group)
   useEffect(() => {
@@ -136,6 +172,7 @@ export function TreemapView({ grouping, onFocusTab, onCloseTab, onReady }: Treem
           onBack={() => {
             setFocusedChildId(null);
             setFocusedGroupId(null);
+            onFocusDismissed?.();
           }}
           onBackToGroup={() => setFocusedChildId(null)}
         />
