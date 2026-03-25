@@ -111,7 +111,8 @@ export function enforceSubgroups(
     const parts = domain.split(".");
     if (parts.length >= 3) {
       const sub = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
-      const base = parts[parts.length - 2].charAt(0).toUpperCase() + parts[parts.length - 2].slice(1);
+      const base =
+        parts[parts.length - 2].charAt(0).toUpperCase() + parts[parts.length - 2].slice(1);
       return `${base} ${sub}`;
     }
     return parts[parts.length - 2]

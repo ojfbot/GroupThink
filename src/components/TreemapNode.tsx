@@ -381,7 +381,11 @@ function TabContent({
       {h > 64 && w > 120 && tab.tags && tab.tags.length > 0 && (
         <div className="gt-node__tab-tags">
           {tab.tags.slice(0, 3).map((tag) => (
-            <span key={tag} className="gt-tag" style={{ backgroundColor: `hsl(${node.colorIndex * 47 + 200}, 25%, ${40}%)` }}>
+            <span
+              key={tag}
+              className="gt-tag"
+              style={{ backgroundColor: `hsl(${node.colorIndex * 47 + 200}, 25%, ${40}%)` }}
+            >
               {tag}
             </span>
           ))}

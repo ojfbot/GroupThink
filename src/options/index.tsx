@@ -122,8 +122,8 @@ function Options() {
           <option value="full">Full — also bookmarks + recent history</option>
         </select>
         <p className="hint">
-          When enabled, browser signals are sent to the LLM for smarter grouping.
-          Data is gathered fresh per request and never stored.
+          When enabled, browser signals are sent to the LLM for smarter grouping. Data is gathered
+          fresh per request and never stored.
           {enrichment !== "off" && " Additional browser permissions will be requested."}
         </p>
       </div>
