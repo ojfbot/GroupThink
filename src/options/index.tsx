@@ -9,10 +9,19 @@ const MODELS = [
   { value: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5" },
 ];
 
+type EnrichmentLevel = "off" | "basic" | "full";
+
+const ENRICHMENT_PERMISSIONS: Record<EnrichmentLevel, string[]> = {
+  off: [],
+  basic: ["history", "topSites"],
+  full: ["history", "topSites", "bookmarks", "sessions"],
+};
+
 function Options() {
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState("claude-sonnet-4-20250514");
   const [theme, setTheme] = useState<"light" | "dark" | "auto">("auto");
+  const [enrichment, setEnrichment] = useState<EnrichmentLevel>("off");
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
@@ -21,8 +30,26 @@ function Options() {
       if (config.anthropicApiKey) setApiKey(config.anthropicApiKey);
       if (config.model) setModel(config.model);
       if (config.theme) setTheme(config.theme);
+      if (config.contextEnrichment) setEnrichment(config.contextEnrichment);
     });
   }, []);
+
+  const handleEnrichmentChange = async (level: EnrichmentLevel) => {
+    if (level === "off") {
+      setEnrichment(level);
+      return;
+    }
+    const perms = ENRICHMENT_PERMISSIONS[level];
+    try {
+      const granted = await chrome.permissions.request({ permissions: perms });
+      if (granted) {
+        setEnrichment(level);
+      }
+      // If denied, keep current level
+    } catch {
+      // Permission request failed — keep current level
+    }
+  };
 
   const handleSave = async () => {
     await chrome.runtime.sendMessage({
@@ -31,6 +58,7 @@ function Options() {
         anthropicApiKey: apiKey,
         model,
         theme,
+        contextEnrichment: enrichment,
       },
     });
     ThemeManager.apply();
@@ -80,6 +108,24 @@ function Options() {
           <option value="dark">Dark</option>
           <option value="light">Light</option>
         </select>
+      </div>
+
+      <div className="field">
+        <label htmlFor="enrichment">Browser Context</label>
+        <select
+          id="enrichment"
+          value={enrichment}
+          onChange={(e) => handleEnrichmentChange(e.target.value as EnrichmentLevel)}
+        >
+          <option value="off">Off — title and URL only</option>
+          <option value="basic">Basic — visit frequency + top sites</option>
+          <option value="full">Full — also bookmarks + recent history</option>
+        </select>
+        <p className="hint">
+          When enabled, browser signals are sent to the LLM for smarter grouping.
+          Data is gathered fresh per request and never stored.
+          {enrichment !== "off" && " Additional browser permissions will be requested."}
+        </p>
       </div>
 
       <div className="actions">
