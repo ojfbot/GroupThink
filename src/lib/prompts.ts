@@ -143,9 +143,7 @@ export function buildContextHints(
   const sections: string[] = [];
 
   if (lines.length > 0) {
-    sections.push(
-      `User context signals (use to inform grouping decisions):\n${lines.join("\n")}`,
-    );
+    sections.push(`User context signals (use to inform grouping decisions):\n${lines.join("\n")}`);
   }
 
   if (context.recentlyClosed.length > 0) {

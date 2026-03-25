@@ -68,9 +68,7 @@ export function TreemapView({
       // If a child label is also requested, find and focus it
       if (requestedChildLabel && match.children) {
         const normalizedChild = requestedChildLabel.toLowerCase();
-        const childMatch = match.children.find(
-          (c) => c.label.toLowerCase() === normalizedChild,
-        );
+        const childMatch = match.children.find((c) => c.label.toLowerCase() === normalizedChild);
         if (childMatch) {
           setFocusedChildId(childMatch.id);
         } else {

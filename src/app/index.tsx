@@ -171,10 +171,7 @@ function App() {
 
   // Listen for background regroups (tab created/removed/updated)
   useEffect(() => {
-    const listener = (
-      changes: { [key: string]: chrome.storage.StorageChange },
-      area: string,
-    ) => {
+    const listener = (changes: { [key: string]: chrome.storage.StorageChange }, area: string) => {
       if (area !== "local") return;
       if (!changes.groupthink_grouping?.newValue) return;
       // Only pick up background updates when not actively loading
