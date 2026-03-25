@@ -3,7 +3,8 @@
   "name": "GroupThink",
   "version": "0.1.0",
   "description": "LLM-powered tab grouping for AI-first browsers",
-  "permissions": ["tabs", "storage", "tabGroups", "activeTab", "debugger"],
+  "permissions": ["tabs", "storage", "activeTab", "debugger", "system.display"],
+  "optional_permissions": ["history", "bookmarks", "topSites", "sessions", "tabGroups"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "src/background/index.ts",
