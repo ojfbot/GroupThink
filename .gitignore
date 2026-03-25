@@ -1,0 +1,8 @@
+node_modules/
+dist/
+*.local
+env.json
+src/lib/env.ts
+.DS_Store
+*.tsbuildinfo
+.claude/

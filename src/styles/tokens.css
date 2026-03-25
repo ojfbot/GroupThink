@@ -1,0 +1,103 @@
+/* GroupThink Design Tokens
+ * Dieter Rams: simplicity, rigor, purposefulness
+ * George Lois: wit, delight, purpose
+ */
+
+:root {
+  /* Surfaces */
+  --gt-bg: #fafafa;
+  --gt-surface-1: #f0f0f0;
+  --gt-surface-2: #e4e4e4;
+  --gt-surface-hover: rgba(0, 0, 0, 0.04);
+  --gt-border: rgba(0, 0, 0, 0.08);
+
+  /* Text */
+  --gt-text-primary: #1a1a1a;
+  --gt-text-secondary: #555555;
+  --gt-text-muted: #999999;
+
+  /* Accent — Lois-bold red */
+  --gt-accent: #e63946;
+  --gt-accent-hover: #d62f3d;
+  --gt-accent-text: #ffffff;
+
+  /* Feedback */
+  --gt-success: #2d936c;
+  --gt-warning: #e9a820;
+  --gt-error: #e63946;
+
+  /* Typography */
+  --gt-font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --gt-font-mono: "JetBrains Mono", "SF Mono", "Fira Code", monospace;
+  --gt-font-weight-normal: 400;
+  --gt-font-weight-medium: 500;
+  --gt-font-weight-bold: 700;
+  --gt-font-weight-black: 900;
+
+  /* Spacing (8px grid) */
+  --gt-space-1: 4px;
+  --gt-space-2: 8px;
+  --gt-space-3: 12px;
+  --gt-space-4: 16px;
+  --gt-space-5: 24px;
+  --gt-space-6: 32px;
+  --gt-space-7: 48px;
+  --gt-space-8: 64px;
+
+  /* Radii */
+  --gt-radius-sm: 4px;
+  --gt-radius-md: 8px;
+  --gt-radius-lg: 12px;
+
+  /* Shadows */
+  --gt-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --gt-shadow-md: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --gt-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+
+  /* Motion */
+  --gt-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --gt-duration-fast: 120ms;
+  --gt-duration: 200ms;
+  --gt-duration-slow: 400ms;
+}
+
+/* Dark mode (default for AI-first browsers) */
+[data-theme="dark"] {
+  --gt-bg: #0a0a0a;
+  --gt-surface-1: #141414;
+  --gt-surface-2: #1e1e1e;
+  --gt-surface-hover: rgba(255, 255, 255, 0.04);
+  --gt-border: rgba(255, 255, 255, 0.08);
+
+  --gt-text-primary: #f0f0f0;
+  --gt-text-secondary: #999999;
+  --gt-text-muted: #555555;
+
+  --gt-accent: #ff4d5a;
+  --gt-accent-hover: #ff6b75;
+
+  --gt-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --gt-shadow-md: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --gt-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --gt-bg: #0a0a0a;
+    --gt-surface-1: #141414;
+    --gt-surface-2: #1e1e1e;
+    --gt-surface-hover: rgba(255, 255, 255, 0.04);
+    --gt-border: rgba(255, 255, 255, 0.08);
+
+    --gt-text-primary: #f0f0f0;
+    --gt-text-secondary: #999999;
+    --gt-text-muted: #555555;
+
+    --gt-accent: #ff4d5a;
+    --gt-accent-hover: #ff6b75;
+
+    --gt-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+    --gt-shadow-md: 0 2px 8px rgba(0, 0, 0, 0.3);
+    --gt-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.4);
+  }
+}

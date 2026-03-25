@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GroupThink</title>
+  <link rel="stylesheet" href="../styles/tokens.css" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      width: 240px;
+      font-family: var(--gt-font-sans);
+      background: var(--gt-bg);
+      color: var(--gt-text-primary);
+      -webkit-font-smoothing: antialiased;
+      padding: 16px;
+    }
+    h1 {
+      font-size: 15px;
+      font-weight: 900;
+      letter-spacing: -0.02em;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .status {
+      font-size: 11px;
+      color: var(--gt-text-muted);
+      margin-bottom: 12px;
+    }
+    .status--ok { color: var(--gt-success); }
+    .status--warn { color: var(--gt-warning); }
+    .menu { display: flex; flex-direction: column; gap: 4px; }
+    .menu button {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      padding: 8px 10px;
+      font-family: var(--gt-font-sans);
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--gt-text-primary);
+      background: none;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      text-align: left;
+      transition: background 100ms;
+    }
+    .menu button:hover { background: var(--gt-surface-hover); }
+    .shortcut {
+      margin-left: auto;
+      font-size: 11px;
+      color: var(--gt-text-muted);
+      font-family: var(--gt-font-mono);
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="./index.tsx"></script>
+</body>
+</html>
