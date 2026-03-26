@@ -12,7 +12,16 @@ export class Storage {
 
   static async getConfig(): Promise<GroupThinkConfig> {
     const result = await chrome.storage.local.get(KEYS.CONFIG);
-    return result[KEYS.CONFIG] ?? { ...DEFAULT_CONFIG };
+    const stored = result[KEYS.CONFIG];
+    if (!stored) return { ...DEFAULT_CONFIG };
+
+    // Migration: existing installs without provider field
+    if (!stored.provider) {
+      stored.provider = stored.anthropicApiKey ? "anthropic" : "ollama";
+      if (!stored.ollamaBaseUrl) stored.ollamaBaseUrl = "http://localhost:11434";
+    }
+
+    return { ...DEFAULT_CONFIG, ...stored };
   }
 
   static async setConfig(config: Partial<GroupThinkConfig>): Promise<void> {
