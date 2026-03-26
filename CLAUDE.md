@@ -25,7 +25,7 @@ MV3 Chrome extension built with Vite + React + @crxjs/vite-plugin.
 ```
 src/
   manifest.json              MV3 manifest — permissions: tabs, storage, tabGroups, activeTab, debugger
-  background/index.ts        Service worker. All AI calls, tab capture, caching, preemptive regrouping.
+  background/index.ts        Service worker. All AI calls, tab capture, caching. LLM calls fire only on explicit user action.
   app/
     index.tsx                Main GroupThink UI — chaos animation → treemap view
     index.html               Entry HTML for the app page
@@ -60,7 +60,7 @@ src/
 
 - `ai.ts` (Anthropic SDK) is **only imported in `src/background/index.ts`** — never in app/components
 - App communicates with background via `chrome.runtime.sendMessage`
-- Cache-first loading: app shows cached grouping instantly on mount; background regrouping keeps cache fresh
+- Cache-first loading: app shows cached grouping instantly on mount; regrouping only fires on explicit user action (Refresh, slider, chat)
 - No silent refresh mid-navigation — avoids swapping groups while user is focused inside one
 - Tab IDs are deduplicated across parent/child segments in both layout and flatten paths
 - LLM prompt groups by **topic and intent**, never by website/domain
