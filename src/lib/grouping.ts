@@ -83,8 +83,25 @@ export function shouldRePrompt(
 
 /**
  * Post-LLM enforcement: ensure large groups have children at high specificity.
- * Client-side domain clustering — no LLM call.
+ * Uses title keyword clustering — no LLM call.
  */
+
+const STOPWORDS = new Set([
+  "the", "a", "an", "in", "on", "at", "to", "for", "of", "and", "or",
+  "is", "are", "was", "were", "be", "with", "from", "by", "that", "this",
+  "it", "new", "all", "your", "how", "get", "set", "use", "not", "can",
+  "will", "just", "more", "about", "has", "been", "its", "you", "what",
+  "when", "who", "which", "where", "why", "top", "best", "com", "www",
+  "http", "https", "html", "page", "home", "app", "web",
+]);
+
+function extractKeywords(title: string): string[] {
+  return title
+    .toLowerCase()
+    .split(/[\s|\-/:,.()\[\]{}<>]+/)
+    .filter((w) => w.length >= 3 && !STOPWORDS.has(w));
+}
+
 export function enforceSubgroups(
   result: LLMGroupingResult,
   specificity: number,
@@ -96,85 +113,91 @@ export function enforceSubgroups(
   const tabMap = new Map(tabs.map((t) => [t.id, t]));
   const merged = structuredClone(result);
 
-  function getDomain(tabId: number): string {
-    const t = tabMap.get(tabId);
-    if (!t) return "";
-    try {
-      return new URL(t.url).hostname.replace("www.", "");
-    } catch {
-      return "";
-    }
-  }
-
-  function labelFromDomain(domain: string): string {
-    // "docs.anthropic.com" → "Anthropic Docs", "github.com" → "GitHub"
-    const parts = domain.split(".");
-    if (parts.length >= 3) {
-      const sub = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
-      const base =
-        parts[parts.length - 2].charAt(0).toUpperCase() + parts[parts.length - 2].slice(1);
-      return `${base} ${sub}`;
-    }
-    return parts[parts.length - 2]
-      ? parts[parts.length - 2].charAt(0).toUpperCase() + parts[parts.length - 2].slice(1)
-      : domain;
-  }
-
   for (const group of merged.groups) {
     if (group.tabIds.length < threshold) continue;
     if (group.children && group.children.length > 0) continue;
 
-    // Cluster by domain
-    const domainClusters = new Map<string, number[]>();
+    // Extract keywords from each tab's title
+    const tabKeywords = new Map<number, string[]>();
+    const keywordFreq = new Map<string, number>();
+
     for (const tabId of group.tabIds) {
-      const domain = getDomain(tabId);
-      const key = domain || "__unknown";
-      if (!domainClusters.has(key)) domainClusters.set(key, []);
-      domainClusters.get(key)!.push(tabId);
+      const tab = tabMap.get(tabId);
+      if (!tab) continue;
+      const kws = extractKeywords(tab.title);
+      tabKeywords.set(tabId, kws);
+      for (const kw of new Set(kws)) {
+        keywordFreq.set(kw, (keywordFreq.get(kw) ?? 0) + 1);
+      }
     }
 
-    if (domainClusters.size >= 2) {
-      // Multiple domains → create children from clusters
-      const children: LLMGroupItem[] = [];
-      for (const [domain, tabIds] of domainClusters) {
-        if (tabIds.length === 0) continue;
+    // Pick top keywords that appear in 2+ tabs but not ALL tabs (otherwise not discriminating)
+    const tabCount = group.tabIds.length;
+    const candidates = [...keywordFreq.entries()]
+      .filter(([, count]) => count >= 2 && count < tabCount)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([kw]) => kw);
+
+    if (candidates.length < 2) {
+      // Can't find meaningful clusters — leave group flat
+      console.log(
+        `[GroupThink] enforceSubgroups: "${group.label}" — no viable keyword clusters, leaving flat`,
+      );
+      continue;
+    }
+
+    // Assign each tab to its best-matching keyword cluster
+    const clusters = new Map<string, number[]>();
+    const assigned = new Set<number>();
+
+    for (const keyword of candidates) {
+      clusters.set(keyword, []);
+    }
+
+    for (const tabId of group.tabIds) {
+      const kws = tabKeywords.get(tabId) ?? [];
+      // Find the first (most frequent) candidate keyword this tab matches
+      const match = candidates.find((c) => kws.includes(c));
+      if (match && !assigned.has(tabId)) {
+        clusters.get(match)!.push(tabId);
+        assigned.add(tabId);
+      }
+    }
+
+    // Unassigned tabs go into an "Other" cluster
+    const unassigned = group.tabIds.filter((id) => !assigned.has(id));
+
+    // Build children from clusters with 2+ tabs
+    const children: LLMGroupItem[] = [];
+    const overflow: number[] = [...unassigned];
+
+    for (const [keyword, tabIds] of clusters) {
+      if (tabIds.length >= 2) {
         children.push({
-          label: domain === "__unknown" ? "Other" : labelFromDomain(domain),
+          label: keyword.charAt(0).toUpperCase() + keyword.slice(1),
           tabIds,
         });
+      } else {
+        overflow.push(...tabIds);
       }
-      // Merge tiny children (1 tab) into the largest child
-      const sorted = children.sort((a, b) => b.tabIds.length - a.tabIds.length);
-      const kept: LLMGroupItem[] = [];
-      for (const child of sorted) {
-        if (child.tabIds.length <= 1 && kept.length > 0) {
-          kept[0].tabIds.push(...child.tabIds);
-        } else {
-          kept.push(child);
-        }
-      }
-      if (kept.length >= 2) {
-        group.children = kept;
-        group.tabIds = [];
-        console.log(
-          `[GroupThink] enforceSubgroups: decomposed "${group.label}" into ${kept.length} children`,
-        );
-      }
-    } else if (group.tabIds.length >= 6) {
-      // Single domain, 6+ tabs → split into halves by title
-      const sortedIds = [...group.tabIds].sort((a, b) => {
-        const ta = tabMap.get(a)?.title ?? "";
-        const tb = tabMap.get(b)?.title ?? "";
-        return ta.localeCompare(tb);
-      });
-      const mid = Math.ceil(sortedIds.length / 2);
-      group.children = [
-        { label: `${group.label} A`, tabIds: sortedIds.slice(0, mid) },
-        { label: `${group.label} B`, tabIds: sortedIds.slice(mid) },
-      ];
+    }
+
+    // Merge overflow into the largest child
+    if (overflow.length > 0 && children.length > 0) {
+      children.sort((a, b) => b.tabIds.length - a.tabIds.length);
+      children[0].tabIds.push(...overflow);
+    }
+
+    if (children.length >= 2) {
+      group.children = children;
       group.tabIds = [];
       console.log(
-        `[GroupThink] enforceSubgroups: split "${group.label}" into 2 halves (single domain)`,
+        `[GroupThink] enforceSubgroups: decomposed "${group.label}" into ${children.length} children by keyword`,
+      );
+    } else {
+      console.log(
+        `[GroupThink] enforceSubgroups: "${group.label}" — only ${children.length} viable cluster(s), leaving flat`,
       );
     }
   }

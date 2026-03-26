@@ -1,3 +1,7 @@
+import type { LLMProvider } from "../types";
+
+// ── System prompts ──
+
 export const SYSTEM_PROMPT = `Tab organizer. Group by TOPIC/INTENT, never by website. Return valid JSON only.
 
 Rules:
@@ -12,16 +16,43 @@ Rules:
 
 Schema: {"groups":[{"label":"str","sublabel?":"str","tabIds":[int],"children?":[{"label":"str","sublabel?":"str","tabIds":[int]}]}],"ungrouped":[int]}`;
 
+const SYSTEM_PROMPT_LOCAL = `Tab organizer. Return valid JSON only.
+
+Group by TOPIC or ACTIVITY. NEVER name a group after a website (GitHub, AWS, YouTube, Figma, Google, etc). Tabs from different websites that share a purpose go in the same group.
+
+Rules:
+1. Group by what the user is DOING, not where. An AWS billing page and a Stripe dashboard both belong in "Billing", not "AWS" and "Stripe".
+2. Labels: 1–3 words, describe the activity or topic. FORBIDDEN labels: any domain name or brand.
+3. Field name for tab IDs is "tabIds" (camelCase). No variants.
+4. Categorize every tab. "ungrouped" must be empty — use a catchall if needed.
+5. No duplicate tab IDs across groups.
+6. When specificity requires children: move ALL tabIds into children, parent tabIds=[].
+7. Groups with ≤3 tabs: no children regardless of specificity.
+
+Schema: {"groups":[{"label":"str","sublabel?":"str","tabIds":[int],"children?":[{"label":"str","sublabel?":"str","tabIds":[int]}]}],"ungrouped":[int]}`;
+
+export function getSystemPrompt(provider?: LLMProvider): string {
+  return provider === "ollama" ? SYSTEM_PROMPT_LOCAL : SYSTEM_PROMPT;
+}
+
+// ── Grouping prompt ──
+
 export function buildGroupingPrompt(
   tabs: { id: number; title: string; url: string }[],
   specificity: number,
   contextHints?: string,
+  options?: { provider?: LLMProvider },
 ): string {
+  const isLocal = options?.provider === "ollama";
+
   const tabList = tabs
     .map((t) => {
       try {
         const u = new URL(t.url);
-        return `${t.id}|${t.title}|${u.hostname}${u.pathname.slice(0, 50)}`;
+        // Local models: hostname only (reduce domain signal). Cloud: hostname + path.
+        return isLocal
+          ? `${t.id}|${t.title}|${u.hostname}`
+          : `${t.id}|${t.title}|${u.hostname}${u.pathname.slice(0, 50)}`;
       } catch {
         return `${t.id}|${t.title}|${t.url.slice(0, 60)}`;
       }
@@ -35,13 +66,36 @@ export function buildGroupingPrompt(
         ? "Groups with 6+ tabs MUST have 2–4 children (min 2 tabs each)."
         : "Groups with 4+ tabs MUST have 2–5 children (min 2 tabs each).";
 
-  let prompt = `Specificity: ${specificity}/10. ${childRule}
+  const parts: string[] = [];
 
-Tabs (id|title|url):
-${tabList}
+  parts.push(`Specificity: ${specificity}/10. ${childRule}`);
 
-Also return: "tabDescriptions":{"<id>":"5-10 word summary"}, "tabTags":{"<id>":["tag",...]}.
-Tags: 1–3 lowercase topic words per tab.`;
+  // Few-shot examples for local models
+  if (isLocal) {
+    parts.push(`
+Example:
+Tabs: 101|S3 bucket policies|aws.amazon.com 102|React useState deep dive|youtube.com 103|Deploy Next.js to AWS|dev.to 104|GitHub Actions CI/CD|github.com 105|Terraform AWS modules|registry.terraform.io
+Good: {"groups":[{"label":"Cloud Infra","tabIds":[101,105]},{"label":"Frontend Dev","tabIds":[102,103]},{"label":"CI/CD","tabIds":[104]}],"ungrouped":[]}
+Bad: {"groups":[{"label":"AWS","tabIds":[101,105]},{"label":"YouTube","tabIds":[102]},{"label":"Dev.to","tabIds":[103]},{"label":"GitHub","tabIds":[104]}],"ungrouped":[]}
+Domain names are NEVER used as group labels.`);
+
+    if (specificity >= 5) {
+      parts.push(`Example with children (specificity ${specificity}):
+{"label":"Cloud Infra","tabIds":[],"children":[{"label":"Networking","tabIds":[201,202]},{"label":"Storage","tabIds":[203,204,205]}]}
+Parent tabIds MUST be [] when children exist.`);
+    }
+  }
+
+  parts.push(`Tabs (id|title|${isLocal ? "host" : "url"}):\n${tabList}`);
+
+  // Only request tabDescriptions/tabTags for cloud models
+  if (!isLocal) {
+    parts.push(
+      `Also return: "tabDescriptions":{"<id>":"5-10 word summary"}, "tabTags":{"<id>":["tag",...]}.\nTags: 1–3 lowercase topic words per tab.`,
+    );
+  }
+
+  let prompt = parts.join("\n\n");
 
   if (contextHints) {
     prompt += `\n\n${contextHints}`;
@@ -49,6 +103,8 @@ Tags: 1–3 lowercase topic words per tab.`;
 
   return prompt;
 }
+
+// ── Sweep prompt ──
 
 export function buildSweepPrompt(
   existingGroups: { label: string; tabIds: number[] }[],
@@ -73,6 +129,8 @@ Groups: ${groupList}
 Tabs (id|title|host):
 ${tabList}`;
 }
+
+// ── Context hints ──
 
 export function buildContextHints(
   context: import("./browser-context").BrowserContext,
@@ -126,6 +184,8 @@ export function buildContextHints(
 
   return sections.length > 0 ? sections.join("\n\n") : undefined;
 }
+
+// ── Refine prompt ──
 
 export function buildRefinePrompt(currentGroupingJson: string, userInstruction: string): string {
   return `Grouping: ${currentGroupingJson}
