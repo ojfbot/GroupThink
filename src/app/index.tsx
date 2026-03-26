@@ -29,6 +29,7 @@ function App() {
   const [focusLabel, setFocusLabel] = useState<string | undefined>();
   const [focusChildLabel, setFocusChildLabel] = useState<string | undefined>();
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const didInitRef = useRef(false);
 
   const isLoading = loadingPhase !== "idle";
 
@@ -54,11 +55,15 @@ function App() {
     };
   }, [clearTimers]);
 
-  const countTabs = (result: GroupingResponse) =>
-    result.groups.reduce(
-      (sum, g) => sum + g.tabs.length + (g.children?.reduce((s, c) => s + c.tabs.length, 0) ?? 0),
-      0,
-    ) + result.ungrouped.length;
+  const countTabs = useCallback(
+    (result: GroupingResponse) =>
+      result.groups.reduce(
+        (sum, g) =>
+          sum + g.tabs.length + (g.children?.reduce((s, c) => s + c.tabs.length, 0) ?? 0),
+        0,
+      ) + result.ungrouped.length,
+    [],
+  );
 
   const doGrouping = useCallback(
     async (spec: number, opts?: { silent?: boolean }) => {
@@ -116,21 +121,17 @@ function App() {
             });
           });
           setGroupAssignments(assignments);
-        }
-
-        if (silent) {
-          // Silent regroup: storage listener picks up the update automatically.
-          // Only set state here as fallback (storage listener may have already fired).
-          setRawGrouping(result);
-          setTabCount(countTabs(result));
-        } else {
-          // Full regroup: update all state
           setRawGrouping(result);
           setTabCount(countTabs(result));
           setHistory([]);
           setFocusLabel(undefined);
           setFocusChildLabel(undefined);
           setLoadingPhase("idle");
+        }
+
+        if (silent) {
+          setRawGrouping(result);
+          setTabCount(countTabs(result));
         }
       } catch (err) {
         if (!silent) {
@@ -142,9 +143,10 @@ function App() {
     [clearTimers, countTabs],
   );
 
-  // Initial grouping — show cache instantly, then refresh in background
+  // Initial grouping — runs once when API key becomes available
   useEffect(() => {
-    if (!config?.anthropicApiKey) return;
+    if (!config?.anthropicApiKey || didInitRef.current) return;
+    didInitRef.current = true;
 
     (async () => {
       try {
@@ -152,14 +154,10 @@ function App() {
           type: "get-cached-grouping",
         })) as GroupingResponse | null;
         if (cached && cached.groups.length > 0) {
-          // Show cached grouping instantly as placeholder
           setRawGrouping(cached);
           setTabCount(countTabs(cached));
           setSpecificity(cached.specificity ?? specificity);
           setLoadingPhase("idle");
-          // Kick off a silent background regroup so tabs stay fresh
-          // (storage listener will pick up the result)
-          doGrouping(cached.specificity ?? specificity, { silent: true });
           return;
         }
       } catch {
@@ -167,23 +165,8 @@ function App() {
       }
       doGrouping(specificity);
     })();
-  }, [config?.anthropicApiKey, countTabs, doGrouping, specificity]);
-
-  // Listen for background regroups (tab created/removed/updated)
-  useEffect(() => {
-    const listener = (changes: { [key: string]: chrome.storage.StorageChange }, area: string) => {
-      if (area !== "local") return;
-      if (!changes.groupthink_grouping?.newValue) return;
-      // Only pick up background updates when not actively loading
-      if (loadingPhase !== "idle" || chatLoading) return;
-
-      const updated = changes.groupthink_grouping.newValue as GroupingResponse;
-      setRawGrouping(updated);
-      setTabCount(countTabs(updated));
-    };
-    chrome.storage.onChanged.addListener(listener);
-    return () => chrome.storage.onChanged.removeListener(listener);
-  }, [loadingPhase, chatLoading, countTabs]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally runs once
+  }, [config?.anthropicApiKey]);
 
   const handleSpecificityChange = useCallback(
     (newSpec: number) => {
@@ -285,7 +268,8 @@ function App() {
     loadingPhase === "chaos" ||
     loadingPhase === "coalescing" ||
     (loadingPhase === "idle" && displayGrouping && !treemapReady);
-  const chaosPhase: "chaos" | "coalescing" = loadingPhase === "chaos" ? "chaos" : "coalescing";
+  const chaosPhase: "chaos" | "coalescing" =
+    loadingPhase === "chaos" ? "chaos" : "coalescing";
 
   // ── No API key state ──
   if (config && !config.anthropicApiKey) {

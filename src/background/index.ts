@@ -113,33 +113,6 @@ chrome.commands.onCommand.addListener((command) => {
   }
 });
 
-// ── Preemptive background regrouping on tab changes ──
-
-let regroupTimer: ReturnType<typeof setTimeout> | undefined;
-
-function scheduleRegroup() {
-  clearTimeout(regroupTimer);
-  regroupTimer = setTimeout(async () => {
-    try {
-      const config = await Storage.getConfig();
-      if (!config.anthropicApiKey) return;
-      // Use specificity from last grouping (preserves user's slider position)
-      const lastGrouping = await Storage.getGrouping();
-      const specificity = lastGrouping?.specificity ?? config.specificity;
-      console.log("[GroupThink] preemptive regroup triggered by tab change");
-      await handleMessage({ type: "group-tabs", specificity });
-    } catch (err) {
-      console.warn("[GroupThink] preemptive regroup failed:", err);
-    }
-  }, 10_000); // 10s debounce
-}
-
-chrome.tabs.onCreated.addListener(scheduleRegroup);
-chrome.tabs.onRemoved.addListener(scheduleRegroup);
-chrome.tabs.onUpdated.addListener((_tabId, changeInfo) => {
-  if (changeInfo.url) scheduleRegroup();
-});
-
 // ── Auto-configure on install ──
 
 chrome.runtime.onInstalled.addListener(async (details) => {
@@ -179,8 +152,17 @@ async function handleMessage(message: { type: string; [key: string]: unknown }):
     case "ping":
       return { ok: true };
 
-    case "get-config":
-      return Storage.getConfig();
+    case "get-config": {
+      const cfg = await Storage.getConfig();
+      if (!cfg.anthropicApiKey && ENV_CONFIG?.ANTHROPIC_API_KEY) {
+        await Storage.setConfig({
+          anthropicApiKey: ENV_CONFIG.ANTHROPIC_API_KEY,
+          model: ENV_CONFIG.ANTHROPIC_MODEL || cfg.model,
+        });
+        return Storage.getConfig();
+      }
+      return cfg;
+    }
 
     case "set-config": {
       await Storage.setConfig(message.config as Record<string, unknown>);
@@ -201,39 +183,8 @@ async function handleMessage(message: { type: string; [key: string]: unknown }):
 
     case "get-tabs": {
       const tabs = await getAllTabs();
-
-      // Capture thumbnails for each window's active (visible) tab
-      const windowIds = [...new Set(tabs.map((t) => t.windowId))];
-      const thumbnails = new Map<number, string>();
-
-      await Promise.allSettled(
-        windowIds.map(async (wid) => {
-          try {
-            const dataUrl = await chrome.tabs.captureVisibleTab(wid, {
-              format: "jpeg",
-              quality: 40,
-            });
-            // Find the active tab in this window
-            const activeTabs = await chrome.tabs.query({ windowId: wid, active: true });
-            if (activeTabs[0]?.id) {
-              thumbnails.set(activeTabs[0].id, dataUrl);
-            }
-          } catch {
-            // captureVisibleTab can fail (e.g., devtools focused) — ignore
-          }
-        }),
-      );
-
-      // Attach thumbnails to matching tabs
-      const enrichedTabs = tabs.map((t) => {
-        const thumb = thumbnails.get(t.id);
-        return thumb ? { ...t, thumbnail: thumb } : t;
-      });
-
-      console.log(
-        `[GroupThink] get-tabs: ${tabs.length} tabs, ${thumbnails.size} thumbnails in ${Math.round(performance.now() - t0)}ms`,
-      );
-      return enrichedTabs;
+      console.log(`[GroupThink] get-tabs: ${tabs.length} tabs in ${Math.round(performance.now() - t0)}ms`);
+      return tabs;
     }
 
     case "group-tabs": {
