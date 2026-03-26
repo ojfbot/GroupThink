@@ -191,7 +191,7 @@ async function handleMessage(message: { type: string; [key: string]: unknown }):
 
     case "group-tabs": {
       const config = await Storage.getConfig();
-      if (!config.anthropicApiKey) {
+      if (config.provider === "anthropic" && !config.anthropicApiKey) {
         throw new Error("No API key configured. Open GroupThink settings to add one.");
       }
 
@@ -207,7 +207,7 @@ async function handleMessage(message: { type: string; [key: string]: unknown }):
         } satisfies GroupingResponse;
       }
 
-      const ai = new GroupThinkAI(config.anthropicApiKey, config.model);
+      const ai = new GroupThinkAI(config);
       const specificity = (message.specificity as number) ?? config.specificity;
 
       // ── Gather browser context (if enabled) ──
@@ -281,7 +281,7 @@ async function handleMessage(message: { type: string; [key: string]: unknown }):
 
     case "refine-grouping": {
       const config = await Storage.getConfig();
-      if (!config.anthropicApiKey) {
+      if (config.provider === "anthropic" && !config.anthropicApiKey) {
         throw new Error("No API key configured.");
       }
 
@@ -304,7 +304,7 @@ async function handleMessage(message: { type: string; [key: string]: unknown }):
         ungrouped: currentGrouping.ungrouped.map((t) => t.id),
       });
 
-      const ai = new GroupThinkAI(config.anthropicApiKey, config.model);
+      const ai = new GroupThinkAI(config);
       const chatHistory = history
         .filter((m) => m.role === "user" || m.role === "assistant")
         .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));

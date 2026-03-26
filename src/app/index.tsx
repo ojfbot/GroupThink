@@ -142,9 +142,11 @@ function App() {
     [clearTimers, countTabs],
   );
 
-  // Initial grouping — runs once when API key becomes available
+  // Initial grouping — runs once when config is ready
+  const configReady =
+    config && (config.provider === "ollama" || !!config.anthropicApiKey);
   useEffect(() => {
-    if (!config?.anthropicApiKey || didInitRef.current) return;
+    if (!configReady || didInitRef.current) return;
     didInitRef.current = true;
 
     (async () => {
@@ -165,7 +167,7 @@ function App() {
       doGrouping(specificity);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally runs once
-  }, [config?.anthropicApiKey]);
+  }, [configReady]);
 
   const handleSpecificityChange = useCallback(
     (newSpec: number) => {
@@ -269,8 +271,8 @@ function App() {
     (loadingPhase === "idle" && displayGrouping && !treemapReady);
   const chaosPhase: "chaos" | "coalescing" = loadingPhase === "chaos" ? "chaos" : "coalescing";
 
-  // ── No API key state ──
-  if (config && !config.anthropicApiKey) {
+  // ── No API key state (only applies to Anthropic provider) ──
+  if (config && config.provider === "anthropic" && !config.anthropicApiKey) {
     return (
       <div className="gt-app">
         <div className="gt-setup">

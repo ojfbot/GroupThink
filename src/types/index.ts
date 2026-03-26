@@ -62,8 +62,12 @@ export interface ConversationMessage {
 
 // ── Config ──
 
+export type LLMProvider = "ollama" | "anthropic";
+
 export interface GroupThinkConfig {
+  provider: LLMProvider;
   anthropicApiKey?: string;
+  ollamaBaseUrl?: string;
   model: string;
   specificity: number;
   theme: "light" | "dark" | "auto";
@@ -71,7 +75,9 @@ export interface GroupThinkConfig {
 }
 
 export const DEFAULT_CONFIG: GroupThinkConfig = {
-  model: "claude-sonnet-4-20250514",
+  provider: "ollama",
+  model: "qwen2.5:7b",
+  ollamaBaseUrl: "http://localhost:11434",
   specificity: 5,
   theme: "auto",
   contextEnrichment: "off",

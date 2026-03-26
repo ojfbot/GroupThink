@@ -1,7 +1,7 @@
-import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
-import type { LLMGroupingResult, TabInfo } from "../types";
-import { buildGroupingPrompt, buildRefinePrompt, buildSweepPrompt, SYSTEM_PROMPT } from "./prompts";
+import type { GroupThinkConfig, LLMGroupingResult, LLMProvider, TabInfo } from "../types";
+import { type LLMClient, createLLMClient } from "./llm-client";
+import { buildGroupingPrompt, buildRefinePrompt, buildSweepPrompt, getSystemPrompt } from "./prompts";
 
 // ── Zod schema for LLM response validation ──
 
@@ -53,9 +53,7 @@ function normalizeGroup(group: Record<string, unknown>): Record<string, unknown>
     }
   }
 
-  // Safety: if no tabIds found at all, look harder
   if (!("tabIds" in out)) {
-    // Check for any array of numbers as a fallback
     for (const [key, value] of Object.entries(group)) {
       if (
         Array.isArray(value) &&
@@ -70,7 +68,6 @@ function normalizeGroup(group: Record<string, unknown>): Record<string, unknown>
         break;
       }
     }
-    // Last resort: empty array
     if (!("tabIds" in out)) {
       console.warn(
         `[GroupThink] normalize: no tab IDs found in group "${group.label ?? "?"}", keys: ${Object.keys(group).join(", ")}`,
@@ -108,21 +105,16 @@ function normalizeResponse(parsed: unknown): unknown {
     obj.ungrouped = [];
   }
 
-  // Pass through tabDescriptions as-is (Zod validates it)
-
   return obj;
 }
 
 export class GroupThinkAI {
-  private client: Anthropic;
-  private model: string;
+  private client: LLMClient;
+  private provider: LLMProvider;
 
-  constructor(apiKey: string, model: string) {
-    this.client = new Anthropic({
-      apiKey,
-      dangerouslyAllowBrowser: true,
-    });
-    this.model = model;
+  constructor(config: GroupThinkConfig) {
+    this.client = createLLMClient(config);
+    this.provider = config.provider;
   }
 
   async groupTabs(
@@ -139,21 +131,25 @@ export class GroupThinkAI {
     }));
 
     const t0 = performance.now();
-    const response = await this.client.messages.create({
-      model: this.model,
-      max_tokens: 4096,
-      system: SYSTEM_PROMPT,
+    const response = await this.client.complete({
+      system: getSystemPrompt(this.provider),
       messages: [
-        { role: "user", content: buildGroupingPrompt(tabSummaries, specificity, contextHints) },
+        {
+          role: "user",
+          content: buildGroupingPrompt(tabSummaries, specificity, contextHints, {
+            provider: this.provider,
+          }),
+        },
       ],
+      maxTokens: this.provider === "ollama" ? 2048 : 4096,
     });
     const elapsed = Math.round(performance.now() - t0);
 
     console.log(
-      `[GroupThink] LLM response in ${elapsed}ms, usage: input=${response.usage.input_tokens} output=${response.usage.output_tokens}`,
+      `[GroupThink] LLM response in ${elapsed}ms, usage: input=${response.inputTokens ?? "?"} output=${response.outputTokens ?? "?"}`,
     );
 
-    return this.parseResponse(response);
+    return this.parseResponse(response.text);
   }
 
   async sweepUncategorized(
@@ -165,19 +161,18 @@ export class GroupThinkAI {
     );
 
     const t0 = performance.now();
-    const response = await this.client.messages.create({
-      model: this.model,
-      max_tokens: 1024,
-      system: SYSTEM_PROMPT,
+    const response = await this.client.complete({
+      system: getSystemPrompt(this.provider),
       messages: [{ role: "user", content: buildSweepPrompt(existingGroups, ungroupedTabs) }],
+      maxTokens: 1024,
     });
     const elapsed = Math.round(performance.now() - t0);
 
     console.log(
-      `[GroupThink] LLM sweep response in ${elapsed}ms, usage: input=${response.usage.input_tokens} output=${response.usage.output_tokens}`,
+      `[GroupThink] LLM sweep response in ${elapsed}ms, usage: input=${response.inputTokens ?? "?"} output=${response.outputTokens ?? "?"}`,
     );
 
-    return this.parseResponse(response);
+    return this.parseResponse(response.text);
   }
 
   async refineGrouping(
@@ -189,36 +184,27 @@ export class GroupThinkAI {
       `[GroupThink] refineGrouping: "${userInstruction}", ${history.length} history msgs`,
     );
 
-    const messages: Anthropic.MessageParam[] = [
-      ...history.map((m) => ({
-        role: m.role as "user" | "assistant",
-        content: m.content,
-      })),
-      { role: "user", content: buildRefinePrompt(currentGroupingJson, userInstruction) },
+    const messages = [
+      ...history,
+      { role: "user" as const, content: buildRefinePrompt(currentGroupingJson, userInstruction) },
     ];
 
     const t0 = performance.now();
-    const response = await this.client.messages.create({
-      model: this.model,
-      max_tokens: 2048,
-      system: SYSTEM_PROMPT,
+    const response = await this.client.complete({
+      system: getSystemPrompt(this.provider),
       messages,
+      maxTokens: 2048,
     });
     const elapsed = Math.round(performance.now() - t0);
 
     console.log(
-      `[GroupThink] LLM refine response in ${elapsed}ms, usage: input=${response.usage.input_tokens} output=${response.usage.output_tokens}`,
+      `[GroupThink] LLM refine response in ${elapsed}ms, usage: input=${response.inputTokens ?? "?"} output=${response.outputTokens ?? "?"}`,
     );
 
-    return this.parseResponse(response);
+    return this.parseResponse(response.text);
   }
 
-  private parseResponse(response: Anthropic.Message): LLMGroupingResult {
-    const text = response.content
-      .filter((block): block is Anthropic.TextBlock => block.type === "text")
-      .map((block) => block.text)
-      .join("");
-
+  private parseResponse(text: string): LLMGroupingResult {
     // Strip markdown fences if present
     const cleaned = text
       .replace(/^```(?:json)?\s*/m, "")
@@ -229,7 +215,6 @@ export class GroupThinkAI {
 
     const parsed = JSON.parse(cleaned);
 
-    // Log raw field names per group before normalization
     if (Array.isArray(parsed.groups)) {
       parsed.groups.forEach((g: Record<string, unknown>, i: number) => {
         console.log(

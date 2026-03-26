@@ -85,6 +85,33 @@
       color: var(--gt-text-secondary);
     }
     .btn-ghost:hover { background: var(--gt-surface-hover); }
+    .field-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .field-row input { flex: 1; }
+    .btn-test {
+      flex-shrink: 0;
+      background: var(--gt-surface-1);
+      color: var(--gt-text-secondary);
+      border: 1px solid var(--gt-border);
+      white-space: nowrap;
+    }
+    .btn-test:hover { background: var(--gt-surface-hover); }
+    .btn-test--ok {
+      color: var(--gt-success);
+      border-color: var(--gt-success);
+    }
+    .btn-test:disabled { opacity: 0.6; cursor: default; }
+    .hint--error { color: var(--gt-error, #f44); }
+    code {
+      font-family: var(--gt-font-mono, monospace);
+      font-size: 12px;
+      background: var(--gt-surface-1);
+      padding: 1px 5px;
+      border-radius: 3px;
+    }
     .saved {
       font-size: 13px;
       color: var(--gt-success);
