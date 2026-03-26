@@ -1,44 +1,16 @@
-export const SYSTEM_PROMPT = `You are a tab organizer. Given a list of browser tabs, group them by TOPIC and INTENT, not by website or domain.
-
-Core principle:
-- Group by what the page is ABOUT, not where it's hosted. A YouTube video about "Claude Code best practices" belongs with other Claude/Anthropic tabs, NOT in a "Videos" or "YouTube" group. A Medium article about React belongs with React/frontend tabs, not a "Medium" group. A GitHub repo for a Python library belongs with Python tabs, not a generic "GitHub" group.
-- Think about what the user was DOING when they opened each tab — group tabs that serve the same task or topic together.
-- When browser context signals are provided (visit frequency, bookmarks, recently closed tabs), use them to make better grouping decisions: high visit counts indicate active projects, bookmark folders reveal the user's mental model, recently closed tabs hint at completed or paused tasks.
+export const SYSTEM_PROMPT = `Tab organizer. Group by TOPIC/INTENT, never by website. Return valid JSON only.
 
 Rules:
-- Return ONLY valid JSON, no markdown fences, no commentary
-- Each group has a "label" of 1–3 words (concise, like a magazine section header)
-- CRITICAL: When the specificity level calls for subcategories (see user prompt), you MUST use "children" to decompose qualifying groups. A group that qualifies for decomposition MUST NOT have an empty or missing "children" array. When you create children, move all tab IDs into the children — the parent's "tabIds" should be empty.
-- Children have their own "label" (1–3 words) and optionally a "sublabel" (1–3 words) for extra context
-- Groups with 3 or fewer tabs should stay broad regardless of specificity
-- You MUST categorize every tab. The "ungrouped" array should be empty. Create a catchall group (e.g. "Miscellany") rather than leaving any tab ungrouped.
-- Never repeat a tab ID across multiple groups
-- Be witty and precise with labels — prefer evocative over generic
-- NEVER create groups based on website/domain (no "YouTube", "GitHub", "Medium", "Reddit" groups). Always group by the content's topic.
-- CRITICAL: The field for tab IDs must be exactly "tabIds" (camelCase). Never use "tabs", "tab_ids", or other variants.
-- For each tab, write a 5–10 word description summarizing the page content. Include these in a top-level "tabDescriptions" map keyed by tab ID (as string).
-- For each tab, provide 1–3 short tags (1–2 words each) describing the page's topic or purpose. Include these in a top-level "tabTags" map keyed by tab ID (as string). Tags should be lowercase, concise topic labels (e.g., "ai", "docs", "pricing", "tutorial", "api reference").
+1. Group by page content, not host. YouTube video about React → React group, not "YouTube".
+2. Labels: 1–3 words, evocative. No domain-based groups.
+3. Field name for tab IDs is "tabIds" (camelCase). No variants.
+4. Categorize every tab. "ungrouped" must be empty — use a catchall if needed.
+5. No duplicate tab IDs across groups.
+6. When specificity requires children: move ALL tabIds into children, parent tabIds=[].
+7. Groups with ≤3 tabs: no children regardless of specificity.
+8. Use browser context signals when provided (visit frequency, bookmarks, etc).
 
-JSON schema:
-{
-  "groups": [
-    {
-      "label": "string (1-3 words)",
-      "sublabel": "string (1-3 words, optional)",
-      "tabIds": [number],
-      "children": [
-        {
-          "label": "string",
-          "sublabel": "string (optional)",
-          "tabIds": [number]
-        }
-      ]
-    }
-  ],
-  "ungrouped": [number],
-  "tabDescriptions": { "<tabId>": "string (5-10 word description)" },
-  "tabTags": { "<tabId>": ["string (1-2 word tag)", ...] }
-}`;
+Schema: {"groups":[{"label":"str","sublabel?":"str","tabIds":[int],"children?":[{"label":"str","sublabel?":"str","tabIds":[int]}]}],"ungrouped":[int]}`;
 
 export function buildGroupingPrompt(
   tabs: { id: number; title: string; url: string }[],
@@ -46,29 +18,34 @@ export function buildGroupingPrompt(
   contextHints?: string,
 ): string {
   const tabList = tabs
-    .map(
-      (t) =>
-        `[${t.id}] "${t.title}" — ${new URL(t.url).hostname}${new URL(t.url).pathname.slice(0, 60)}`,
-    )
+    .map((t) => {
+      try {
+        const u = new URL(t.url);
+        return `${t.id}|${t.title}|${u.hostname}${u.pathname.slice(0, 50)}`;
+      } catch {
+        return `${t.id}|${t.title}|${t.url.slice(0, 60)}`;
+      }
+    })
     .join("\n");
 
-  let prompt = `Specificity level: ${specificity}/10
+  const childRule =
+    specificity <= 3
+      ? "No children. 3–5 broad groups."
+      : specificity <= 6
+        ? "Groups with 6+ tabs MUST have 2–4 children (min 2 tabs each)."
+        : "Groups with 4+ tabs MUST have 2–5 children (min 2 tabs each).";
 
-Guidelines for this level:
-- 1–3: Use 3–5 very broad categories. No subcategories.
-- 4–6: Moderate detail. Any group with 6+ tabs MUST be decomposed into 2–4 children subcategories. Each child must have at least 2 tabs.
-- 7–10: Fine-grained. Any group with 4+ tabs MUST be decomposed into 2–5 children subcategories. Each child must have at least 2 tabs. This is a hard requirement.
+  let prompt = `Specificity: ${specificity}/10. ${childRule}
 
-Tabs:
-${tabList}`;
+Tabs (id|title|url):
+${tabList}
+
+Also return: "tabDescriptions":{"<id>":"5-10 word summary"}, "tabTags":{"<id>":["tag",...]}.
+Tags: 1–3 lowercase topic words per tab.`;
 
   if (contextHints) {
     prompt += `\n\n${contextHints}`;
   }
-
-  prompt += `\n\nBefore returning, verify: at this specificity level, every group above the tab threshold has "children". If not, fix it.
-
-Return JSON only.`;
 
   return prompt;
 }
@@ -77,36 +54,24 @@ export function buildSweepPrompt(
   existingGroups: { label: string; tabIds: number[] }[],
   ungroupedTabs: { id: number; title: string; url: string }[],
 ): string {
-  const groupList = existingGroups
-    .map((g) => `• "${g.label}" (${g.tabIds.length} tabs)`)
-    .join("\n");
+  const groupList = existingGroups.map((g) => `${g.label} (${g.tabIds.length})`).join(", ");
 
   const tabList = ungroupedTabs
     .map((t) => {
       try {
-        return `[${t.id}] "${t.title}" — ${new URL(t.url).hostname}${new URL(t.url).pathname.slice(0, 60)}`;
+        return `${t.id}|${t.title}|${new URL(t.url).hostname}`;
       } catch {
-        return `[${t.id}] "${t.title}" — ${t.url}`;
+        return `${t.id}|${t.title}`;
       }
     })
     .join("\n");
 
-  return `These tabs were left uncategorized in a previous pass. Assign EVERY one to an existing group or create 1–2 new groups.
+  return `Assign each uncategorized tab to an existing group or create 1–2 new groups. Use EXACT label strings. ungrouped must be empty. No tabDescriptions/tabTags needed.
 
-Existing groups:
-${groupList}
+Groups: ${groupList}
 
-Uncategorized tabs:
-${tabList}
-
-Rules:
-- To assign to an existing group, use the EXACT label string from above.
-- Create a new group only if no existing group fits.
-- Every tab must appear in exactly one group.
-- The "ungrouped" array MUST be empty.
-- Use "tabIds" (camelCase) for the tab ID field.
-
-Return JSON only (same schema).`;
+Tabs (id|title|host):
+${tabList}`;
 }
 
 export function buildContextHints(
@@ -163,17 +128,13 @@ export function buildContextHints(
 }
 
 export function buildRefinePrompt(currentGroupingJson: string, userInstruction: string): string {
-  return `Current tab grouping:
-${currentGroupingJson}
+  return `Grouping: ${currentGroupingJson}
 
-User instruction: "${userInstruction}"
+Instruction: "${userInstruction}"
 
-Apply the user's instruction to the current grouping. Return the complete revised grouping as JSON (same schema).
+Apply the instruction. Return complete revised grouping JSON. No tabDescriptions/tabTags needed.
 
-FOCUS: If the user's message implies they want to look at, focus on, explore, or zoom into a specific group or topic, include a "focusGroupLabel" field set to the EXACT label of the group to focus. If they also mention a specific subgroup or child, include "focusChildLabel" with the EXACT child label. If the user asks to focus a topic that doesn't have its own group yet, restructure the grouping so that topic becomes a distinct group, then set "focusGroupLabel" to it. If the user's instruction is purely structural (merge, rename, split) with no focus intent, omit these fields.
-
-Examples of focus intent: "show me my AI tabs", "focus on shopping", "what do I have open about React?", "zoom into the research group", "let me see the Claude stuff"
-Examples of no focus intent: "merge News and Media", "rename Shopping to Commerce", "split Development into Frontend and Backend"
-
-Return JSON only.`;
+FOCUS: If user wants to view/explore a topic, add "focusGroupLabel" (exact label) and optionally "focusChildLabel". If the topic isn't a group yet, create it. Omit for structural changes (merge/rename/split).
+Focus examples: "show AI tabs", "focus on shopping", "zoom into research"
+No-focus examples: "merge News and Media", "rename Shopping to Commerce"`;
 }
