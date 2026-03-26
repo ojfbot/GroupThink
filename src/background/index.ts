@@ -183,7 +183,9 @@ async function handleMessage(message: { type: string; [key: string]: unknown }):
 
     case "get-tabs": {
       const tabs = await getAllTabs();
-      console.log(`[GroupThink] get-tabs: ${tabs.length} tabs in ${Math.round(performance.now() - t0)}ms`);
+      console.log(
+        `[GroupThink] get-tabs: ${tabs.length} tabs in ${Math.round(performance.now() - t0)}ms`,
+      );
       return tabs;
     }
 

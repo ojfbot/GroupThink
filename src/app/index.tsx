@@ -58,8 +58,7 @@ function App() {
   const countTabs = useCallback(
     (result: GroupingResponse) =>
       result.groups.reduce(
-        (sum, g) =>
-          sum + g.tabs.length + (g.children?.reduce((s, c) => s + c.tabs.length, 0) ?? 0),
+        (sum, g) => sum + g.tabs.length + (g.children?.reduce((s, c) => s + c.tabs.length, 0) ?? 0),
         0,
       ) + result.ungrouped.length,
     [],
@@ -268,8 +267,7 @@ function App() {
     loadingPhase === "chaos" ||
     loadingPhase === "coalescing" ||
     (loadingPhase === "idle" && displayGrouping && !treemapReady);
-  const chaosPhase: "chaos" | "coalescing" =
-    loadingPhase === "chaos" ? "chaos" : "coalescing";
+  const chaosPhase: "chaos" | "coalescing" = loadingPhase === "chaos" ? "chaos" : "coalescing";
 
   // ── No API key state ──
   if (config && !config.anthropicApiKey) {
