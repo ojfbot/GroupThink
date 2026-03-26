@@ -1,4 +1,5 @@
 import type { ConversationMessage, GroupingResponse, GroupThinkConfig } from "../types";
+import { DEFAULT_CONFIG } from "../types";
 
 const KEYS = {
   CONFIG: "groupthink_config",
@@ -11,13 +12,7 @@ export class Storage {
 
   static async getConfig(): Promise<GroupThinkConfig> {
     const result = await chrome.storage.local.get(KEYS.CONFIG);
-    return (
-      result[KEYS.CONFIG] ?? {
-        model: "claude-sonnet-4-20250514",
-        specificity: 5,
-        theme: "auto",
-      }
-    );
+    return result[KEYS.CONFIG] ?? { ...DEFAULT_CONFIG };
   }
 
   static async setConfig(config: Partial<GroupThinkConfig>): Promise<void> {
