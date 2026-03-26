@@ -167,7 +167,7 @@ export class GroupThinkAI {
     const t0 = performance.now();
     const response = await this.client.messages.create({
       model: this.model,
-      max_tokens: 4096,
+      max_tokens: 1024,
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: buildSweepPrompt(existingGroups, ungroupedTabs) }],
     });
@@ -200,7 +200,7 @@ export class GroupThinkAI {
     const t0 = performance.now();
     const response = await this.client.messages.create({
       model: this.model,
-      max_tokens: 4096,
+      max_tokens: 2048,
       system: SYSTEM_PROMPT,
       messages,
     });

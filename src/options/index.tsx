@@ -5,8 +5,8 @@ import type { GroupThinkConfig } from "../types";
 
 const MODELS = [
   { value: "claude-sonnet-4-20250514", label: "Claude Sonnet 4 (recommended)" },
+  { value: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5 (cheapest)" },
   { value: "claude-opus-4-20250514", label: "Claude Opus 4" },
-  { value: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5" },
 ];
 
 type EnrichmentLevel = "off" | "basic" | "full";
