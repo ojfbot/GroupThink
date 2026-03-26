@@ -125,7 +125,6 @@ export function TreemapView({
 
   const handleClickGroup = useCallback(
     (groupId: string) => {
-      // Check if this is a child-group click (when parent is focused)
       if (focusedGroupId) {
         const focusedGroup = grouping.groups.find((g) => g.id === focusedGroupId);
         const isChild =
@@ -133,11 +132,22 @@ export function TreemapView({
           groupId === `${focusedGroupId}__direct`;
 
         if (isChild) {
+          // Toggle child focus within the focused group
           if (focusedChildId === groupId) {
             setFocusedChildId(null);
           } else {
             setFocusedChildId(groupId);
           }
+          return;
+        }
+
+        // Check if this is a child of a sibling group — navigate to the parent
+        const siblingParent = grouping.groups.find(
+          (g) => g.id !== focusedGroupId && g.children?.some((c) => c.id === groupId),
+        );
+        if (siblingParent) {
+          setFocusedGroupId(siblingParent.id);
+          setFocusedChildId(null);
           return;
         }
 
