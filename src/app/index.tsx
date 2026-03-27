@@ -143,8 +143,7 @@ function App() {
   );
 
   // Initial grouping — runs once when config is ready
-  const configReady =
-    config && (config.provider === "ollama" || !!config.anthropicApiKey);
+  const configReady = config && (config.provider === "ollama" || !!config.anthropicApiKey);
   useEffect(() => {
     if (!configReady || didInitRef.current) return;
     didInitRef.current = true;

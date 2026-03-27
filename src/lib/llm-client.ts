@@ -68,10 +68,7 @@ class OllamaClient implements LLMClient {
   }
 
   async complete(request: LLMRequest): Promise<LLMResponse> {
-    const messages = [
-      { role: "system" as const, content: request.system },
-      ...request.messages,
-    ];
+    const messages = [{ role: "system" as const, content: request.system }, ...request.messages];
 
     const res = await fetch(`${this.baseUrl}/v1/chat/completions`, {
       method: "POST",
