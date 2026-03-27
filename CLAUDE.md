@@ -1,6 +1,6 @@
 # CLAUDE.md — GroupThink
 
-LLM-powered tab grouping Chrome extension. Groups browser tabs by topic and intent using Claude, displayed in a zoomable d3 treemap.
+LLM-powered tab grouping Chrome extension. Groups browser tabs by topic and intent using Claude or local models via Ollama, displayed in a zoomable d3 treemap.
 
 ## Commands
 
@@ -40,7 +40,7 @@ src/
     SpecificitySlider.tsx    1–10 granularity control
     TabCard.tsx, TabGroup.tsx, GroupGrid.tsx   Legacy grid components (unused by treemap)
   lib/
-    ai.ts                    Anthropic SDK wrapper — groupTabs, sweepUncategorized, refineGrouping
+    ai.ts                    LLM client layer (Anthropic + Ollama) — groupTabs, sweepUncategorized, refineGrouping
     prompts.ts               System prompt + per-call prompt builders
     grouping.ts              flattenForSpecificity, shouldRePrompt, moveTab, mergeStepResults, mergeSmallGroups
     treemap-layout.ts        d3-hierarchy layout engine — computeUnifiedLayout
@@ -58,7 +58,7 @@ src/
 
 ## Key invariants
 
-- `ai.ts` (Anthropic SDK) is **only imported in `src/background/index.ts`** — never in app/components
+- `ai.ts` (LLM client layer) is **only imported in `src/background/index.ts`** — never in app/components
 - App communicates with background via `chrome.runtime.sendMessage`
 - Cache-first loading: app shows cached grouping instantly on mount; regrouping only fires on explicit user action (Refresh, slider, chat)
 - No silent refresh mid-navigation — avoids swapping groups while user is focused inside one
@@ -71,7 +71,9 @@ src/
 ```json
 {
   "ANTHROPIC_API_KEY": "sk-ant-...",
-  "ANTHROPIC_MODEL": "claude-sonnet-4-20250514"
+  "ANTHROPIC_MODEL": "claude-sonnet-4-20250514",
+  "OLLAMA_BASE_URL": "http://localhost:11434",
+  "OLLAMA_MODEL": "llama3"
 }
 ```
 
@@ -79,7 +81,7 @@ src/
 
 ## Things NOT to do
 
-- Do not import AI SDK or `ai.ts` outside of `src/background/`
+- Do not import LLM client (`ai.ts`) outside of `src/background/`
 - Do not fire silent grouping refresh from the cache-hit path
 - Do not create domain-based tab groups (no "YouTube", "GitHub" groups) — always topic-based
 - Do not skip tab ID deduplication when building layout segments
