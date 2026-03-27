@@ -1,7 +1,12 @@
 import { z } from "zod";
 import type { GroupThinkConfig, LLMGroupingResult, LLMProvider, TabInfo } from "../types";
-import { type LLMClient, createLLMClient } from "./llm-client";
-import { buildGroupingPrompt, buildRefinePrompt, buildSweepPrompt, getSystemPrompt } from "./prompts";
+import { createLLMClient, type LLMClient } from "./llm-client";
+import {
+  buildGroupingPrompt,
+  buildRefinePrompt,
+  buildSweepPrompt,
+  getSystemPrompt,
+} from "./prompts";
 
 // ── Zod schema for LLM response validation ──
 

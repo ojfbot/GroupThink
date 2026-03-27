@@ -89,9 +89,7 @@ function Options() {
     } catch (err) {
       setOllamaStatus("error");
       setOllamaError(
-        err instanceof Error
-          ? `Cannot reach Ollama: ${err.message}`
-          : "Cannot reach Ollama server",
+        err instanceof Error ? `Cannot reach Ollama: ${err.message}` : "Cannot reach Ollama server",
       );
     }
   };
