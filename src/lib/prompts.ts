@@ -28,6 +28,7 @@ Rules:
 5. No duplicate tab IDs across groups.
 6. When specificity requires children: move ALL tabIds into children, parent tabIds=[].
 7. Groups with ≤3 tabs: no children regardless of specificity.
+8. Use browser context signals when provided (visit frequency, bookmarks, etc).
 
 Schema: {"groups":[{"label":"str","sublabel?":"str","tabIds":[int],"children?":[{"label":"str","sublabel?":"str","tabIds":[int]}]}],"ungrouped":[int]}`;
 
